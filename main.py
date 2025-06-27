@@ -151,6 +151,24 @@ async def handle_gigachat(message: types.Message):
     except Exception as e:
         logger.error(f"GigaChat error: {str(e)}")
         await message.answer("⚠️ Не удалось получить ответ. Попробуйте позже.")
+        
+@dp.message(Command("test_giga"))
+async def test_giga(message: types.Message):
+    try:
+        # Простейший тестовый запрос
+        test_prompt = "Ответь одним словом: работаю"
+        response = await giga.ask(test_prompt)
+        
+        if response:
+            answer = response['choices'][0]['message']['content']
+            await message.answer(f"✅ GigaChat отвечает: {answer}")
+        else:
+            await message.answer("❌ Получен пустой ответ от GigaChat")
+            
+    except Exception as e:
+        error_msg = f"❌ Ошибка подключения к GigaChat:\n{str(e)}"
+        logger.error(error_msg)
+        await message.answer(error_msg)
 
 @dp.message()
 async def handle_unknown(message: types.Message):
