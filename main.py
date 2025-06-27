@@ -37,6 +37,8 @@ async def start(message: types.Message):
             "/generate_meal - сгенерировать блюдо\n"
             "/ask [вопрос] - задать вопрос GigaChat\n"
             "/update - обновить данные профиля"
+            "/test_giga - обновить данные профиля"
+            "/show_config - обновить данные профиля"
         )
     else:
         await message.answer(
