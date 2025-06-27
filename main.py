@@ -38,3 +38,17 @@ async def send_nutrition(message: types.Message):
 async def generate_meal(message: types.Message):
     image_url = generate_meal_image("Здоровый завтрак для похудения")
     await bot.send_photo(message.chat.id, image_url)
+
+python
+from utils.gigachat import GigaChatAPI
+
+giga = GigaChatAPI()
+
+@dp.message(Command("ask"))
+async def handle_gigachat(message: types.Message):
+    try:
+        response = await giga.ask(message.text)
+        answer = response['choices'][0]['message']['content']
+        await message.answer(answer[:4000])  # Обрезаем длинные ответы
+    except Exception as e:
+        await message.answer(f"Ошибка: {str(e)}")
