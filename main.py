@@ -151,7 +151,18 @@ async def handle_gigachat(message: types.Message):
     except Exception as e:
         logger.error(f"GigaChat error: {str(e)}")
         await message.answer("⚠️ Не удалось получить ответ. Попробуйте позже.")
-        
+
+@dp.message(Command("show_config"))
+async def show_config(message: types.Message):
+    from config import BOT_TOKEN, GIGACHAT_AUTH_KEY, DATABASE_URL
+    config_info = (
+        f"Конфигурация:\n"
+        f"BOT_TOKEN: {'установлен' if BOT_TOKEN else 'НЕ НАЙДЕН'}\n"
+        f"GIGACHAT_AUTH_KEY: {'установлен' if GIGACHAT_AUTH_KEY else 'НЕ НАЙДЕН'}\n"
+        f"DATABASE_URL: {'установлен' if DATABASE_URL else 'НЕ НАЙДЕН'}"
+    )
+    await message.answer(config_info)
+
 @dp.message(Command("test_giga"))
 async def test_giga(message: types.Message):
     try:
