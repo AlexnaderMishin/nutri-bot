@@ -4,3 +4,4 @@ requests
 sqlalchemy
 matplotlib
 python-dotenv
+aiohttp==3.9.3 --prefer-binary
