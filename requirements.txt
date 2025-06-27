@@ -1,7 +1,6 @@
-aiogram==3.0.0
-gigachat==0.1.7
-requests==2.31.0
-sqlalchemy==2.0.23
-aiohttp==3.9.3 ; python_version >= "3.11"
-python-dotenv==1.0.0
---prefer-binary
+aiogram~=3.0.0
+gigachat~=0.1.7
+requests~=2.31.0
+sqlalchemy~=2.0.23
+aiohttp~=3.8.5
+python-dotenv~=1.0.0
