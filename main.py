@@ -117,6 +117,16 @@ async def send_nutrition(message: types.Message):
         if not all(section in plan for section in required_sections):
             raise Exception("Неполный ответ от GigaChat: отсутствуют обязательные разделы")
 
+        # Вынесем функцию извлечения секции внутрь обработчика
+        def extract_section(text: str, section_name: str) -> str:
+            """Извлекает секцию между заголовком и следующим заголовком"""
+            try:
+                start_idx = text.index(section_name) + len(section_name)
+                end_idx = text.find("[", start_idx) if "[" in text[start_idx:] else len(text)
+                return text[start_idx:end_idx].strip()
+            except ValueError:
+                return "Информация отсутствует"
+
         # Форматирование с эмодзи и улучшенной структурой
         formatted_plan = (
             f"🏋️‍♂️ *ПЕРСОНАЛЬНЫЙ ПЛАН ПИТАНИЯ*\n\n"
@@ -125,10 +135,10 @@ async def send_nutrition(message: types.Message):
             f"• Рост: {user_data['height']} см\n"
             f"• Возраст: {user_data['age']} лет\n"
             f"• Цель: {user_data['goal']}\n\n"
-            f"🔢 *Калорийность:*\n{self._extract_section(plan, '[Калорийность]')}\n\n"
-            f"⚖️ *БЖУ:*\n{self._extract_section(plan, '[БЖУ]')}\n\n"
-            f"📌 *Рекомендации:*\n{self._extract_section(plan, '[Рекомендации]')}\n\n"
-            f"🍽️ *Пример меню на день:*\n{self._extract_section(plan, '[Меню]')}\n\n"
+            f"🔢 *Калорийность:*\n{extract_section(plan, '[Калорийность]')}\n\n"
+            f"⚖️ *БЖУ:*\n{extract_section(plan, '[БЖУ]')}\n\n"
+            f"📌 *Рекомендации:*\n{extract_section(plan, '[Рекомендации]')}\n\n"
+            f"🍽️ *Пример меню на день:*\n{extract_section(plan, '[Меню]')}\n\n"
             f"💧 *Важно:* Пейте 2-3 литра воды в день!\n"
             f"💪 Успехов в достижении цели!"
         )
@@ -142,15 +152,6 @@ async def send_nutrition(message: types.Message):
     except Exception as e:
         logger.error(f"Ошибка генерации плана: {str(e)}", exc_info=True)
         await message.answer("⚠️ Произошла ошибка. Убедитесь, что ваш профиль заполнен правильно и попробуйте снова.")
-
-def _extract_section(self, text: str, section_name: str) -> str:
-    """Извлекает секцию между заголовком и следующим заголовком"""
-    try:
-        start_idx = text.index(section_name) + len(section_name)
-        end_idx = text.find("[", start_idx) if "[" in text[start_idx:] else len(text)
-        return text[start_idx:end_idx].strip()
-    except ValueError:
-        return "Информация отсутствует"
 
 def _format_meal(self, plan: str, meal_type: str) -> str:
     """Форматирует описание приема пищи"""
