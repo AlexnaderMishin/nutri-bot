@@ -94,9 +94,9 @@ async def send_nutrition(message: types.Message):
             f"- Возраст: {user_data['age']} лет\n"
             f"- Цель: {user_data['goal']}\n\n"
             f"Предоставь:\n"
-            f"1. Рекомендуемую калорийность\n"
-            f"2. Баланс БЖУ\n"
-            f"3. 3 варианта меню на день"
+            f"1. Рацион на семь дней"
+            f"2. 1 варианта меню на день"
+            
         )
         
         response = await giga.ask(prompt)
