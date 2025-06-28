@@ -13,26 +13,23 @@ class GigaChatAPI:
         self._auth()
 
     def _auth(self):
-        """Аутентификация в API GigaChat"""
+        """Аутентификация с использованием данных из config.py"""
         try:
-            url = f"{self.base_url}/oauth"
-            payload = {
-                'scope': 'GIGACHAT_API_PERS'
-            }
-            headers = {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json',
-                'RqUID': os.getenv('GIGA_RQUID'),
-                'Authorization': f"Basic {os.getenv('GIGA_AUTH_TOKEN')}"
-            }
-            
-            response = requests.post(url, headers=headers, data=payload, timeout=10)
-            response.raise_for_status()
+            response = requests.post(
+                f"{self.base_url}/oauth",
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json',
+                    'RqUID': "ваш_RqUID",  # Добавьте в config.py если нужно
+                    'Authorization': f"Basic {config.GIGACHAT_AUTH_KEY}"
+                },
+                data={'scope': 'GIGACHAT_API_PERS'},
+                timeout=10
+            )
             self.token = response.json()['access_token']
-            
         except Exception as e:
-            logger.error(f"Auth error: {str(e)}")
-            raise Exception("Ошибка аутентификации в GigaChat")
+            print(f"Auth error: {e}")
+            self.token = None
 
     async def ask(self, user_prompt: str, system_prompt: str = None) -> Dict[str, Any]:
         """Отправка запроса к GigaChat API"""
