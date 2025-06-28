@@ -179,15 +179,16 @@ async def send_nutrition(message: types.Message):
         )
 
         # Отправляем сообщение
-        await message.answer(
-            formatted_plan,
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
+        await message.answer(formatted_plan, parse_mode="Markdown")
 
     except Exception as e:
-        logger.error(f"Ошибка генерации плана: {str(e)}", exc_info=True)
-        await message.answer(f"⚠️ Произошла ошибка: {str(e)}\nПопробуйте снова или обратитесь в поддержку.")
+        logger.error(f"Ошибка: {str(e)}", exc_info=True)
+        await message.answer(
+            "⚠️ Не удалось сгенерировать полный план. Попробуйте следующее:\n"
+            "1. Проверьте данные профиля командой /start\n"
+            "2. Попробуйте снова через 5 минут\n"
+            "3. Если проблема сохраняется - сообщите в поддержку"
+        )
 
 def _format_meal(self, plan: str, meal_type: str) -> str:
     """Форматирует описание приема пищи"""
