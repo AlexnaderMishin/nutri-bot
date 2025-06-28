@@ -98,7 +98,7 @@ async def send_nutrition(message: types.Message):
             f"- Цель: {user_data['goal']}\n\n"
             "Формат ответа (строго соблюдать):\n"
             "День 1\n"
-            "Завтрак:\n- Блюдо 1 (XX г, XX ккал)\n"
+            "Завтрак:\n"
             "Обед:\n"
             "Ужин:\n"
             "КБЖУ дня: X ккал | Б: Xг | Ж: Xг | У: Xг\n\n"
