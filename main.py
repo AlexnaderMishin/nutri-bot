@@ -84,17 +84,31 @@ async def handle_profile(message: types.Message):
 @dp.message(Command("nutrition"))
 async def send_nutrition(message: types.Message):
     try:
+        # Правильные отступы (используйте 4 пробела)
         user_data = get_user_data(message.from_user.id)
         if not user_data:
             await message.answer("⚠️ Сначала заполните профиль через /start")
             return
             
-        response = await giga.ask(f"Создай детальный план питания для: {user_data}")
+        # Формируем правильный промпт для GigaChat
+        prompt = (
+            f"Создай детальный план питания для:\n"
+            f"- Вес: {user_data['weight']} кг\n"
+            f"- Рост: {user_data['height']} см\n"
+            f"- Возраст: {user_data['age']} лет\n"
+            f"- Цель: {user_data['goal']}\n\n"
+            "Предоставь в формате:\n"
+            "1. Рекомендуемая калорийность\n"
+            "2. Баланс БЖУ\n"
+            "3. Пример меню на день с разбивкой по приемам пищи"
+        )
+        
+        response = await giga.ask(prompt)
         plan = response['choices'][0]['message']['content']
         
-        # Форматируем ответ
+        # Форматируем ответ (исправлены кавычки и скобки)
         formatted_plan = (
-            "🍏 *Персональный план питания* 🍏\n\n"
+            "🍎 *Персональный план питания* 🍎\n\n"
             "🔹 *Параметры:*\n"
             f"• Вес: {user_data['weight']} кг\n"
             f"• Рост: {user_data['height']} см\n"
@@ -102,11 +116,11 @@ async def send_nutrition(message: types.Message):
             f"• Цель: {user_data['goal']}\n\n"
             "📊 *Рекомендации:*\n"
             "```\n"
-            f"{plan.split('Рекомендации:')[-1].strip()}\n"
+            f"{self._extract_section(plan, 'Рекомендуемая калорийность')}\n"
             "```\n\n"
             "🍽️ *Пример меню на день:*\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
-            "🥣 *Завтрак:*\n"
+            "🍳 *Завтрак:*\n"
             f"{self._format_meal(plan, 'Завтрак')}\n\n"
             "☕ *Перекус:*\n"
             f"{self._format_meal(plan, 'Перекус')}\n\n"
@@ -114,12 +128,12 @@ async def send_nutrition(message: types.Message):
             f"{self._format_meal(plan, 'Обед')}\n\n"
             "🥗 *Ужин:*\n"
             f"{self._format_meal(plan, 'Ужин')}\n\n"
-            "💡 *Совет:* Не забывайте пить воду!"
+            "💧 *Совет:* Не забывайте пить воду!"
         )
         
         await message.answer(
             formatted_plan,
-            parse_mode="Markdown",
+            parse_mode="MarkdownV2",  # Используем MarkdownV2 для лучшей поддержки
             disable_web_page_preview=True
         )
         
@@ -133,7 +147,13 @@ def _format_meal(self, plan: str, meal_type: str) -> str:
     if len(parts) > 1:
         meal = parts[1].split("\n\n")[0].strip()
         return "• " + meal.replace("\n", "\n• ")
-    return "Информация отсутствует"
+    return "• Информация отсутствует"
+
+def _extract_section(self, text: str, section_name: str) -> str:
+    """Извлекает конкретную секцию из текста"""
+    if section_name in text:
+        return text.split(section_name)[1].split("\n\n")[0].strip()
+    return "Данные не найдены"
 
 @dp.message(Command("generate_meal"))
 async def generate_meal(message: types.Message):
