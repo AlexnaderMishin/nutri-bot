@@ -1,6 +1,6 @@
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from gigachat import GigaChatAPI
+from utils.giga_api import GigaChatAPI
 from config import config
 import logging
 
