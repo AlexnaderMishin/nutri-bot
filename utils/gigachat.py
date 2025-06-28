@@ -1,4 +1,4 @@
-import os
+from config import config
 import requests
 import json
 from typing import Dict, Any
@@ -20,15 +20,16 @@ class GigaChatAPI:
                 headers={
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'Accept': 'application/json',
-                    'RqUID': "ваш_RqUID",  # Добавьте в config.py если нужно
+                    'RqUID': "unique-request-id",  # Можно генерировать автоматически
                     'Authorization': f"Basic {config.GIGACHAT_AUTH_KEY}"
                 },
                 data={'scope': 'GIGACHAT_API_PERS'},
                 timeout=10
             )
+            response.raise_for_status()
             self.token = response.json()['access_token']
         except Exception as e:
-            print(f"Auth error: {e}")
+            logger.error(f"Auth error: {e}")
             self.token = None
 
     async def ask(self, user_prompt: str, system_prompt: str = None) -> Dict[str, Any]:
@@ -36,24 +37,19 @@ class GigaChatAPI:
         try:
             if not self.token:
                 self._auth()
+                if not self.token:
+                    raise Exception("Не удалось получить токен")
 
             url = f"{self.base_url}/chat/completions"
             
             messages = []
             
-            # Системный промпт из скриншота
             if not system_prompt:
                 system_prompt = """
                 # Профессиональный AI-бот нутрициолог
                 
                 Ты - опытный помощник в области здорового питания и диетологии. 
                 Составляешь персонализированные планы питания с точным расчетом КБЖУ.
-                
-                Требования:
-                - Только научно обоснованные рекомендации
-                - Учет индивидуальных параметров
-                - Четкие граммовки и калорийность
-                - Профессиональный тон без излишней фамильярности
                 """
             
             messages.append({
