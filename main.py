@@ -89,23 +89,22 @@ async def send_nutrition(message: types.Message):
         
     try:
         user_data = get_user_data(message.from_user.id)
-        prompt = (
-            f"Создай персональный план питания для:\n"
-            f"- Вес: {user_data['weight']} кг\n"
-            f"- Рост: {user_data['height']} см\n"
-            f"- Возраст: {user_data['age']} лет\n"
-            f"- Цель: {user_data['goal']}\n\n"
-            f"Предоставь:\n"
-            f"1. Рекомендуемую калорийность\n"
-            f"2. Баланс БЖУ\n"
-            f"3. 3 варианта меню на день"
-        )
+        prompt = f"..."
         
         response = await giga.ask(prompt)
+        if 'choices' not in response:
+            raise ValueError("Некорректный ответ от GigaChat")
+            
         await message.answer(response['choices'][0]['message']['content'][:4000])
+    except aiohttp.ClientError as e:
+        logger.error(f"Connection error: {str(e)}")
+        await message.answer("⚠️ Ошибка подключения к GigaChat. Попробуйте позже.")
+    except (KeyError, ValueError) as e:
+        logger.error(f"API response error: {str(e)}")
+        await message.answer("⚠️ Ошибка обработки ответа от GigaChat.")
     except Exception as e:
-        logger.error(f"Nutrition plan error: {str(e)}")
-        await message.answer("⚠️ Не удалось сгенерировать план питания. Попробуйте позже.")
+        logger.error(f"Unexpected error: {str(e)}")
+        await message.answer("⚠️ Неизвестная ошибка при генерации плана питания.")
 
 @router.message(Command("generate_meal"))
 async def generate_meal(message: types.Message):
