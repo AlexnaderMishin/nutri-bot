@@ -18,8 +18,8 @@ router = Router()
 def get_commands_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="/profile"), KeyboardButton(text="/update")],
-            [KeyboardButton(text="/help")]
+            [KeyboardButton(text="/Профиль"), KeyboardButton(text="/Обновить данные")],
+            [KeyboardButton(text="/Помощь")]
         ],
         resize_keyboard=True,
         input_field_placeholder="Выберите команду..."
