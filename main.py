@@ -133,7 +133,7 @@ async def show_diary(message: types.Message):
     
     for idx, entry in enumerate(entries, 1):
         text += (
-            f"{idx}. 🍴 <u>{entry.food_name}</u>\n"
+            f"{idx}. || <u>{entry['food_name']}</u>\n"
             f"   🔥 {entry.calories} ккал  "
             f"🥩 {entry.protein}г  "
             f"🥑 {entry.fats}г  "

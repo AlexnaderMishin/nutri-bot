@@ -206,7 +206,7 @@ def get_today_food_entries(user_id: int) -> List[Dict]:
     """Возвращает записи о питании за сегодня"""
     session = get_session()
     try:
-        today = datetime.utcnow().date()
+        today = datetime.now().date()
         entries = session.query(FoodEntry).filter(
             FoodEntry.user_id == user_id,
             func.date(FoodEntry.date) == today
@@ -220,7 +220,7 @@ def get_today_food_entries(user_id: int) -> List[Dict]:
             "fats": entry.fats,
             "carbs": entry.carbs,
             "portion_size": entry.portion_size,
-            "date": entry.date
+            "date": entry.date.isoformat()
         } for entry in entries]
     except Exception as e:
         logger.error(f"Ошибка получения записей о питании: {e}")
