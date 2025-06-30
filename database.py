@@ -285,8 +285,17 @@ def search_food_items(query: str, limit: int = 5) -> List[Dict]:
     finally:
         Session.remove()
 
+
 # Инициализация БД при первом запуске
 try:
+    # ВРЕМЕННЫЙ КОД ДЛЯ СБРОСА БАЗЫ (удалить после первого успешного запуска)
+    Base.metadata.drop_all(engine)  # Удалить все таблицы
+    logger.warning("Все таблицы БД были удалены для пересоздания")
+    
+    Base.metadata.create_all(engine)  # Создать заново
+    logger.info("Все таблицы БД были пересозданы")
+    
+    # Стандартная проверка/создание таблиц
     safe_create_tables()
     logger.info("Проверка таблиц БД завершена")
 except Exception as e:
