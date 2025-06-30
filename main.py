@@ -81,44 +81,62 @@ async def handle_profile(message: types.Message):
 
 @dp.message(Command("nutrition"))
 async def send_nutrition(message: types.Message):
+    if not await check_user_profile(message.from_user.id):
+        await message.answer("⚠️ Сначала заполните профиль через команду /start")
+        return
+        
     try:
-        if not await check_user_profile(message.from_user.id):
-            await message.answer("ℹ️ Сначала заполните профиль через /start")
-            return
-
         user_data = get_user_data(message.from_user.id)
-        logger.info(f"Generating plan for user: {user_data}")
-
-        # Добавляем проверку токена
-        if not giga.token:
-            await message.answer("⚠️ Ошибка аутентификации. Попробуйте позже.")
-            return
-
-        prompt = f"""
-        Составь план питания на 1 день для:
-        - Вес: {user_data['weight']} кг
-        - Рост: {user_data['height']} см
-        - Возраст: {user_data['age']} лет
-        - Цель: {user_data['goal']}
-        Формат: завтрак, обед, ужин + 2 перекуса с КБЖУ
-        """
-
-        processing_msg = await message.answer("🍳 Готовим ваш план...")
+        prompt = (
+            f"Создай персональный план питания для:\n"
+            f"- Вес: {user_data['weight']} кг\n"
+            f"- Рост: {user_data['height']} см\n"
+            f"- Возраст: {user_data['age']} лет\n"
+            f"- Цель: {user_data['goal']}\n\n"
+            f"Предоставь:\n"
+            f"1. Рекомендуемую калорийность\n"
+            f"2. Баланс БЖУ\n"
+            f"3. 3 варианта меню на день"
+        )
         
-        try:
-            response = await giga.ask(prompt)
-            plan = response['choices'][0]['message']['content']
-            await processing_msg.delete()
-            await message.answer(plan[:4000])
-        except Exception as e:
-            await processing_msg.delete()
-            logger.error(f"API error: {str(e)}")
-            await message.answer("⚠️ Ошибка при генерации плана. Попробуйте позже.")
-
+        response = await giga.ask(prompt)
+        await message.answer(response['choices'][0]['message']['content'][:4000])
     except Exception as e:
-        logger.error(f"Nutrition error: {str(e)}")
-        await message.answer("⚠️ Внутренняя ошибка. Попробуйте позже.")
+        logger.error(f"Nutrition plan error: {str(e)}")
+        await message.answer("⚠️ Не удалось сгенерировать план питания. Попробуйте позже.")
+
+@dp.message(Command("generate_meal"))
+async def generate_meal(message: types.Message):
+    if not await check_user_profile(message.from_user.id):
+        await message.answer("⚠️ Сначала заполните профиль через команду /start")
+        return
         
+    try:
+        user_data = get_user_data(message.from_user.id)
+        prompt = (
+            f"Придумай рецепт блюда для:\n"
+            f"- Вес: {user_data['weight']} кг\n"
+            f"- Рост: {user_data['height']} см\n"
+            f"- Возраст: {user_data['age']} лет\n"
+            f"- Цель: {user_data['goal']}\n\n"
+            f"Опиши:\n"
+            f"1. Ингредиенты (точные количества)\n"
+            f"2. Пошаговый рецепт\n"
+            f"3. Пищевую ценность"
+        )
+        
+        response = await giga.ask(prompt)
+        meal_description = response['choices'][0]['message']['content']
+        image_url = generate_meal_image(f"{user_data['goal']}: {meal_description[:80]}...")
+        await bot.send_photo(
+            chat_id=message.chat.id,
+            photo=image_url,
+            caption=meal_description[:1000]
+        )
+    except Exception as e:
+        logger.error(f"Meal generation error: {str(e)}")
+        await message.answer("⚠️ Не удалось сгенерировать рецепт. Попробуйте позже.")
+
 @dp.message(Command("ask"))
 async def handle_gigachat(message: types.Message):
     try:
