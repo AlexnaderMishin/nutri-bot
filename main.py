@@ -1,11 +1,9 @@
-from aiogram import Bot, Dispatcher, types, F, Router
+from aiogram import Bot, Dispatcher, types, Router
 from aiogram.filters import Command
 from config import BOT_TOKEN
 import asyncio
 import logging
 
-from utils.gigachat import GigaChatAPI
-from utils.kandinsky import generate_meal_image
 from database import save_user, get_user_data
 
 # Настройка логирования
@@ -16,35 +14,47 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 router = Router()
 dp.include_router(router)
-giga = GigaChatAPI()
 
 async def check_user_profile(user_id: int) -> bool:
     """Проверяет, заполнен ли профиль пользователя"""
-    user_data = get_user_data(user_id)
-    return user_data is not None
+    return get_user_data(user_id) is not None
 
 @router.message(Command("start"))
 async def start(message: types.Message):
     if await check_user_profile(message.from_user.id):
         user_data = get_user_data(message.from_user.id)
         await message.answer(
-            f"Ваш профиль уже заполнен:\n"
+            f"Ваш профиль:\n"
             f"Имя: {user_data['name']}\n"
             f"Рост: {user_data['height']} см\n"
             f"Вес: {user_data['weight']} кг\n"
             f"Возраст: {user_data['age']} лет\n"
             f"Цель: {user_data['goal']}\n\n"
-            "Доступные команды:\n"
-            "/nutrition - получить план питания\n"
-            "/generate_meal - сгенерировать блюдо\n"
-            "/ask [вопрос] - задать вопрос GigaChat\n"
-            "/update - обновить данные профиля"
+            "Команды:\n"
+            "/update - обновить данные\n"
+            "/profile - показать профиль"
         )
     else:
         await message.answer(
             "Привет! Введи данные в формате: Имя/Рост/Вес/Возраст/Цель\n"
             "Пример: Александр/180/75/30/похудение"
         )
+
+@router.message(Command("profile"))
+async def show_profile(message: types.Message):
+    if not await check_user_profile(message.from_user.id):
+        await message.answer("Профиль не заполнен. Используйте /start")
+        return
+    
+    user_data = get_user_data(message.from_user.id)
+    await message.answer(
+        f"Ваш профиль:\n"
+        f"Имя: {user_data['name']}\n"
+        f"Рост: {user_data['height']} см\n"
+        f"Вес: {user_data['weight']} кг\n"
+        f"Возраст: {user_data['age']} лет\n"
+        f"Цель: {user_data['goal']}"
+    )
 
 @router.message(Command("update"))
 async def update_profile(message: types.Message):
@@ -74,13 +84,20 @@ async def handle_profile(message: types.Message):
             age=age_val,
             goal=goal.strip()
         )
-        await message.answer(f"✅ Профиль сохранён!\nИмя: {name}\nРост: {height} см\nВес: {weight} кг\nВозраст: {age} лет\nЦель: {goal}")
+        await message.answer("✅ Профиль сохранён!")
+        await show_profile(message)  # Показываем обновленный профиль
     except ValueError as e:
-        await message.answer(f"❌ Ошибка в данных: {str(e)}\nИспользуй формат: Имя/Рост/Вес/Возраст/Цель\nПример: Иван/180/75/30/похудение")
+        await message.answer(f"❌ Ошибка: {str(e)}\nФормат: Имя/Рост/Вес/Возраст/Цель\nПример: Иван/180/75/30/похудение")
     except Exception as e:
-        logger.error(f"Error saving profile: {str(e)}")
-        await message.answer("❌ Произошла ошибка при сохранении профиля")
+        logger.error(f"Ошибка сохранения: {str(e)}")
+        await message.answer("❌ Ошибка при сохранении профиля")
 
+@router.message()
+async def handle_unknown(message: types.Message):
+    if await check_user_profile(message.from_user.id):
+        await message.answer("Неизвестная команда. Используйте /profile или /update")
+    else:
+        await message.answer("Сначала заполните профиль через /start")
 
 async def main():
     await dp.start_polling(bot)
