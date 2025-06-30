@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from config import DATABASE_URL
 import logging
 from typing import Optional, Dict, List
+from urllib.parse import urlparse
+import os
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -49,14 +51,17 @@ class FoodItem(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 # Настройки подключения для PostgreSQL на Railway
+db_url = urlparse(DATABASE_URL)
+if db_url.scheme == 'postgres':
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://')
+
 engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,  # Важно для поддержания соединения
-    pool_recycle=3600,   # Пересоздавать соединения каждый час
+    DATABASE_URL.replace("postgres://", "postgresql://"),  # Важно для SQLAlchemy 2.0+
+    pool_pre_ping=True,
+    pool_recycle=300,
     connect_args={
-        'connect_timeout': 10,
+        'sslmode': 'require',
+        'connect_timeout': 5,
         'keepalives': 1,
         'keepalives_idle': 30,
         'keepalives_interval': 10,
@@ -158,10 +163,12 @@ def check_db_connection():
     """Проверяет соединение с базой данных"""
     try:
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            from sqlalchemy import text
+            conn.execute(text("SELECT 1"))
+            logger.info("Проверка подключения к БД: УСПЕШНО")
         return True
     except Exception as e:
-        logger.error(f"Ошибка подключения к БД: {e}")
+        logger.error(f"Ошибка подключения к БД: {str(e)}", exc_info=True)
         return False
     
 # Функции для работы с дневником питания
