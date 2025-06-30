@@ -1,4 +1,4 @@
-from aiogram import Bot, Dispatcher, types, Router
+from aiogram import Bot, Dispatcher, types, Router, F
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import BOT_TOKEN
@@ -94,9 +94,12 @@ async def callback_update(callback: types.CallbackQuery):
 @router.message(lambda message: len(message.text.split('/')) == 5)
 async def handle_profile_data(message: types.Message):
     try:
-        name, height, weight, age, goal = [x.strip() for x in message.text.split('/')]
+        parts = [x.strip() for x in message.text.split('/')]
+        if len(parts) != 5:
+            raise ValueError("Неверный формат данных")
+            
+        name, height, weight, age, goal = parts
         
-        # Валидация данных
         if not all([name, height, weight, age, goal]):
             raise ValueError("Все поля должны быть заполнены")
             
