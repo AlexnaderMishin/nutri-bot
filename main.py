@@ -3,20 +3,13 @@ from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
-from config import BOT_TOKEN, FATSECRET_CLIENT_ID, FATSECRET_CLIENT_SECRET
-from database import save_user, get_user_data, save_food_entry, get_today_food_entries, get_food_item, add_food_item 
+from config import BOT_TOKEN
+from fatsecret_api import search_foods
 import asyncio
 import logging
 import datetime
-import aiohttp
-from requests_oauthlib import OAuth1
-import os
-from fatsecret_api import (
-    search_foods,
-    get_food_details,
-    parse_nutrition_data,
-    search_and_get_nutrition
-)
+from database import save_user, get_user_data, save_food_entry, get_today_food_entries
+
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +24,6 @@ class FoodEntryStates(StatesGroup):
     waiting_for_protein = State()
     waiting_for_fats = State()
     waiting_for_carbs = State()
-    choosing_from_search = State()
 
 # Клавиатуры
 def get_commands_keyboard():
@@ -62,63 +54,9 @@ def get_cancel_keyboard():
         resize_keyboard=True
     )
 
-def get_confirm_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Да"), KeyboardButton(text="Нет")],
-            [KeyboardButton(text="Отмена")]
-        ],
-        resize_keyboard=True
-    )
-
 # Проверка профиля пользователя
 async def check_user_profile(user_id: int) -> bool:
     return get_user_data(user_id) is not None
-
-# ==================== FatSecret API ====================
-def get_fatsecret_auth():
-    return OAuth1(
-        FATSECRET_CLIENT_ID,
-        FATSECRET_CLIENT_SECRET,
-        signature_type='auth_header'
-    )
-
-async def search_foods_fatsecret(query: str):
-    url = "https://platform.fatsecret.com/rest/server.api"
-    params = {
-        "method": "foods.search",
-        "search_expression": query,
-        "format": "json",
-        "max_results": 5
-    }
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, auth=get_fatsecret_auth()) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("foods", {}).get("food", [])
-    except Exception as e:
-        logger.error(f"FatSecret API error: {e}")
-    return None
-
-async def get_food_details_fatsecret(food_id: str):
-    url = "https://platform.fatsecret.com/rest/server.api"
-    params = {
-        "method": "food.get",
-        "food_id": food_id,
-        "format": "json"
-    }
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params, auth=get_fatsecret_auth()) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    return data.get("food", {})
-    except Exception as e:
-        logger.error(f"FatSecret API error: {e}")
-    return None
 
 # ==================== ОСНОВНЫЕ КОМАНДЫ ====================
 @router.message(Command("start"))
@@ -218,30 +156,6 @@ async def show_diary(message: types.Message):
     await message.answer(text, parse_mode="HTML")
 
 # ==================== ДОБАВЛЕНИЕ ПРОДУКТА ====================
-async def confirm_food_data(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    
-    # Сохраняем в локальную базу для будущего использования
-    add_food_item(
-        name=data['food_name'],
-        calories=data['calories'],
-        protein=data['protein'],
-        fats=data['fats'],
-        carbs=data['carbs']
-    )
-    
-    await message.answer(
-        "✅ <b>Продукт успешно добавлен!</b>\n\n"
-        f"🍏 {data['food_name']}\n"
-        f"🔥 {data['calories']} ккал\n"
-        f"🥩 {data['protein']}г белков\n"
-        f"🥑 {data['fats']}г жиров\n"
-        f"🍞 {data['carbs']}г углеводов",
-        parse_mode="HTML",
-        reply_markup=get_commands_keyboard()
-    )
-    await state.clear()
-
 @router.message(Command("add_food"))
 async def start_food_entry(message: types.Message, state: FSMContext):
     if not await check_user_profile(message.from_user.id):
@@ -266,89 +180,14 @@ async def cancel_food_entry(message: types.Message, state: FSMContext):
 
 @router.message(FoodEntryStates.waiting_for_food_name)
 async def process_food_name(message: types.Message, state: FSMContext):
-    # Сначала проверяем локальную базу
-    item = get_food_item(message.text)
-    if item:
-        await state.update_data({
-            "food_name": item.name,
-            "calories": item.calories,
-            "protein": item.protein,
-            "fats": item.fats,
-            "carbs": item.carbs
-        })
-        await confirm_food_data(message, state)
-        return
-    
-    # Если нет в локальной базе - ищем в FatSecret
-    await message.answer("🔍 Ищу продукт в базе данных...")
-    foods = await search_foods_fatsecret(message.text)
-    
-    if foods:
-        if isinstance(foods, list):
-            # Показываем список найденных продуктов
-            keyboard = []
-            for food in foods[:5]:
-                name = food.get('food_name', 'Неизвестно')
-                food_id = food.get('food_id', '')
-                keyboard.append([KeyboardButton(text=f"{name} ({food_id})")])
-            
-            await message.answer(
-                "Выберите продукт:",
-                reply_markup=ReplyKeyboardMarkup(
-                    keyboard=keyboard,
-                    resize_keyboard=True
-                )
-            )
-            await state.set_state(FoodEntryStates.choosing_from_search)
-        else:
-            # Найден один продукт
-            await process_fatsecret_food(message, state, foods)
-    else:
-        await message.answer(
-            "Продукт не найден. Введите данные вручную:\n"
-            "🔥 <b>Калорийность (на 100г):</b>\n"
-            "<i>Пример: 52</i>",
-            parse_mode="HTML",
-            reply_markup=get_cancel_keyboard()
-        )
-        await state.set_state(FoodEntryStates.waiting_for_calories)
-
-async def process_fatsecret_food(message: types.Message, state: FSMContext, food_data):
-    food_id = food_data.get('food_id')
-    if not food_id:
-        await message.answer("Ошибка: не найден ID продукта")
-        return
-    
-    details = await get_food_details_fatsecret(food_id)
-    if not details:
-        await message.answer("Не удалось получить детали продукта")
-        return
-    
-    servings = details.get('servings', {}).get('serving', [])
-    if not servings:
-        await message.answer("Нет информации о пищевой ценности")
-        return
-    
-    # Берем первую порцию (обычно 100г)
-    serving = servings[0] if isinstance(servings, list) else servings
-    
-    await state.update_data({
-        "food_name": details.get('food_name', 'Неизвестно'),
-        "calories": float(serving.get('calories', 0)),
-        "protein": float(serving.get('protein', 0)),
-        "fats": float(serving.get('fat', 0)),
-        "carbs": float(serving.get('carbohydrate', 0))
-    })
-    await confirm_food_data(message, state)
-
-@router.message(FoodEntryStates.choosing_from_search)
-async def handle_food_choice(message: types.Message, state: FSMContext):
-    if "(" in message.text and ")" in message.text:
-        food_id = message.text.split("(")[-1].rstrip(")")
-        food_data = {"food_id": food_id}
-        await process_fatsecret_food(message, state, food_data)
-    else:
-        await message.answer("Неверный формат. Попробуйте еще раз.")
+    await state.update_data(food_name=message.text)
+    await message.answer(
+        "🔥 <b>Калорийность (на 100г):</b>\n"
+        "<i>Пример: 52</i>",
+        parse_mode="HTML",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(FoodEntryStates.waiting_for_calories)
 
 @router.message(FoodEntryStates.waiting_for_calories)
 async def process_calories(message: types.Message, state: FSMContext):
