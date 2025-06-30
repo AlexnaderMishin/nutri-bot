@@ -4,7 +4,7 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from config import BOT_TOKEN, FATSECRET_CLIENT_ID, FATSECRET_CLIENT_SECRET
-from database import save_user, get_user_data, save_food_entry, get_today_food_entries, get_food_item, add_food_item
+from database import save_user, get_user_data, save_food_entry, get_today_food_entries, get_food_item, add_food_item 
 import asyncio
 import logging
 import datetime
