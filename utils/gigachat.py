@@ -1,47 +1,62 @@
-import aiohttp
-import uuid
+import requests
+import json
+from typing import Dict, Any
+import logging
 from config import GIGACHAT_AUTH_KEY
-from gigachat import GigaChat
-from config import GIGACHAT_TOKEN
+
+logger = logging.getLogger(__name__)
 
 class GigaChatAPI:
     def __init__(self):
-        self.auth_key = GIGACHAT_AUTH_KEY
-        self.access_token = None
+        self.token = None
+        self.base_url = "https://gigachat.devices.sberbank.ru/api/v1"
+        self._auth()
 
-    async def _get_token(self):
-        url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-        headers = {
-            'Authorization': f'Bearer {self.auth_key}',
-            'RqUID': str(uuid.uuid4()),
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers) as resp:
-                data = await resp.json()
-                self.access_token = data['access_token']
-                return self.access_token
+    def _auth(self):
+        """Аутентификация в API GigaChat"""
+        try:
+            response = requests.post(
+                f"{self.base_url}/oauth",
+                headers={
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Accept': 'application/json',
+                    'RqUID': "unique-request-id-123",  # Можно генерировать случайный
+                    'Authorization': f"Basic {GIGACHAT_AUTH_KEY}"
+                },
+                data={'scope': 'GIGACHAT_API_PERS'},
+                timeout=10
+            )
+            response.raise_for_status()
+            self.token = response.json().get('access_token')
+            if not self.token:
+                raise Exception("Не получили токен доступа")
+        except Exception as e:
+            logger.error(f"Auth error: {str(e)}")
+            raise Exception("Ошибка аутентификации в GigaChat")
 
-    async def ask(self, prompt: str):
-        token = await self._get_token()
-        url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-        data = {
-            "model": "GigaChat",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=data) as resp:
-                return await resp.json()
-            
-def get_nutrition_plan(weight, height, age, goal):
-    prompt = f"Рассчитай КБЖУ для {weight}кг, рост {height}см, возраст {age}, цель: {goal}."
-    giga = GigaChat(credentials=GIGACHAT_TOKEN, verify_ssl_certs=False)
-    response = giga.chat(prompt)
-    return response.choices[0].message.content
+    async def ask(self, prompt: str) -> Dict[str, Any]:
+        """Отправка запроса к GigaChat API"""
+        try:
+            if not self.token:
+                self._auth()
+
+            response = requests.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'Authorization': f"Bearer {self.token}"
+                },
+                json={
+                    "model": "GigaChat-2-Max",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 2000
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.error(f"API request error: {str(e)}")
+            raise Exception("Ошибка запроса к GigaChat API")

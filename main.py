@@ -82,75 +82,43 @@ async def handle_profile(message: types.Message):
 @dp.message(Command("nutrition"))
 async def send_nutrition(message: types.Message):
     try:
-        # Проверяем профиль пользователя
         if not await check_user_profile(message.from_user.id):
             await message.answer("ℹ️ Сначала заполните профиль через /start")
             return
 
         user_data = get_user_data(message.from_user.id)
-        logger.info(f"Generating nutrition plan for user: {user_data}")
+        logger.info(f"Generating plan for user: {user_data}")
 
-        # Улучшенный промпт с четкой структурой
+        # Добавляем проверку токена
+        if not giga.token:
+            await message.answer("⚠️ Ошибка аутентификации. Попробуйте позже.")
+            return
+
         prompt = f"""
-        Составь детальный план питания на 1 день для мужчины:
+        Составь план питания на 1 день для:
         - Вес: {user_data['weight']} кг
         - Рост: {user_data['height']} см
         - Возраст: {user_data['age']} лет
         - Цель: {user_data['goal']}
-        
-        Формат ответа (строго соблюдать):
-        === Калорийность ===
-        XXXX ккал/день
-        
-        === БЖУ ===
-        Белки: XXг (X.Xг/кг)
-        Жиры: XXг
-        Углеводы: XXг
-        
-        === Меню ===
-        Завтрак:
-        - Блюдо 1 (XX г) - XX ккал
-        - Блюдо 2 (XX г) - XX ккал
-        
-        Обед:
-        - Блюдо 1 (XX г) - XX ккал
-        - Блюдо 2 (XX г) - XX ккал
-        
-        Ужин:
-        - Блюдо 1 (XX г) - XX ккал
-        - Блюдо 2 (XX г) - XX ккал
-        
-        Перекусы:
-        - Перекус 1 (XX г) - XX ккал
+        Формат: завтрак, обед, ужин + 2 перекуса с КБЖУ
         """
 
-        # Добавляем индикатор загрузки
-        processing_msg = await message.answer("🍳 Готовим ваш персональный план питания...")
-
-        # Получаем ответ от GigaChat
+        processing_msg = await message.answer("🍳 Готовим ваш план...")
+        
         try:
             response = await giga.ask(prompt)
-            if not response or 'choices' not in response:
-                raise Exception("Не получили корректный ответ от API")
-            
             plan = response['choices'][0]['message']['content']
-            
-            # Проверяем минимальную длину ответа
-            if len(plan) < 100:
-                raise Exception("Ответ слишком короткий")
-            
             await processing_msg.delete()
-            await message.answer(plan[:4000], parse_mode="Markdown")
-            
+            await message.answer(plan[:4000])
         except Exception as e:
             await processing_msg.delete()
-            logger.error(f"GigaChat error: {str(e)}")
-            await message.answer("⚠️ Ошибка при обращении к GigaChat API. Попробуйте позже.")
+            logger.error(f"API error: {str(e)}")
+            await message.answer("⚠️ Ошибка при генерации плана. Попробуйте позже.")
 
     except Exception as e:
         logger.error(f"Nutrition error: {str(e)}")
-        await message.answer("⚠️ Внутренняя ошибка при генерации плана. Попробуйте позже.")
-
+        await message.answer("⚠️ Внутренняя ошибка. Попробуйте позже.")
+        
 @dp.message(Command("ask"))
 async def handle_gigachat(message: types.Message):
     try:
