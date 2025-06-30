@@ -95,6 +95,10 @@ def safe_create_tables():
 # Функции для работы с пользователями
 def save_user(user_id: int, name: str, height: float, weight: float, age: int, goal: str) -> bool:
     """Сохраняет или обновляет данные пользователя"""
+    if not check_db_connection():
+        logger.error("Нет подключения к БД")
+        return False
+
     session = get_session()
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
@@ -114,10 +118,16 @@ def save_user(user_id: int, name: str, height: float, weight: float, age: int, g
                 goal=goal
             ))
         session.commit()
+        
+        # Проверяем, что данные действительно сохранились
+        saved_user = session.query(User).filter(User.user_id == user_id).first()
+        if not saved_user:
+            raise Exception("Пользователь не был сохранен")
+            
         return True
     except Exception as e:
         session.rollback()
-        logger.error(f"Ошибка сохранения пользователя: {e}")
+        logger.error(f"Ошибка сохранения пользователя {user_id}: {str(e)}")
         return False
     finally:
         Session.remove()
@@ -127,19 +137,34 @@ def get_user_data(user_id: int) -> Optional[Dict]:
     session = get_session()
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
-        return {
-            "name": user.name,
-            "height": user.height,
-            "weight": user.weight,
-            "age": user.age,
-            "goal": user.goal
-        } if user else None
+        if user:
+            return {
+                "name": user.name,
+                "height": user.height,
+                "weight": user.weight,
+                "age": user.age,
+                "goal": user.goal,
+                "created_at": user.created_at,
+                "updated_at": user.updated_at
+            }
+        return None
     except Exception as e:
         logger.error(f"Ошибка получения данных пользователя: {e}")
         return None
     finally:
         Session.remove()
 
+#проверка соединения с бд
+def check_db_connection():
+    """Проверяет соединение с базой данных"""
+    try:
+        with engine.connect() as conn:
+            conn.execute("SELECT 1")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка подключения к БД: {e}")
+        return False
+    
 # Функции для работы с дневником питания
 def save_food_entry(
     user_id: int,
