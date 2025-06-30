@@ -1,4 +1,4 @@
-from aiogram import Bot, Dispatcher, types, F
+from aiogram import Bot, Dispatcher, types, F, Router
 from aiogram.filters import Command
 from config import BOT_TOKEN
 import asyncio
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+router = Router()
+dp.include_router(router)
 giga = GigaChatAPI()
 
 async def check_user_profile(user_id: int) -> bool:
@@ -21,7 +23,7 @@ async def check_user_profile(user_id: int) -> bool:
     user_data = get_user_data(user_id)
     return user_data is not None
 
-@dp.message(Command("start"))
+@router.message(Command("start"))
 async def start(message: types.Message):
     if await check_user_profile(message.from_user.id):
         user_data = get_user_data(message.from_user.id)
@@ -44,11 +46,11 @@ async def start(message: types.Message):
             "Пример: Александр/180/75/30/похудение"
         )
 
-@dp.message(Command("update"))
+@router.message(Command("update"))
 async def update_profile(message: types.Message):
     await message.answer("Введите новые данные в формате: Имя/Рост/Вес/Возраст/Цель")
 
-@dp.message(lambda message: len(message.text.split('/')) == 5)
+@router.message(lambda message: len(message.text.split('/')) == 5)
 async def handle_profile(message: types.Message):
     try:
         name, height, weight, age, goal = message.text.split('/')
@@ -79,7 +81,7 @@ async def handle_profile(message: types.Message):
         logger.error(f"Error saving profile: {str(e)}")
         await message.answer("❌ Произошла ошибка при сохранении профиля")
 
-@dp.message(Command("nutrition"))
+@router.message(Command("nutrition"))
 async def send_nutrition(message: types.Message):
     if not await check_user_profile(message.from_user.id):
         await message.answer("⚠️ Сначала заполните профиль через команду /start")
@@ -105,7 +107,7 @@ async def send_nutrition(message: types.Message):
         logger.error(f"Nutrition plan error: {str(e)}")
         await message.answer("⚠️ Не удалось сгенерировать план питания. Попробуйте позже.")
 
-@dp.message(Command("generate_meal"))
+@router.message(Command("generate_meal"))
 async def generate_meal(message: types.Message):
     if not await check_user_profile(message.from_user.id):
         await message.answer("⚠️ Сначала заполните профиль через команду /start")
@@ -137,7 +139,7 @@ async def generate_meal(message: types.Message):
         logger.error(f"Meal generation error: {str(e)}")
         await message.answer("⚠️ Не удалось сгенерировать рецепт. Попробуйте позже.")
 
-@dp.message(Command("ask"))
+@router.message(Command("ask"))
 async def handle_gigachat(message: types.Message):
     try:
         question = message.text[4:].strip()  # Убираем "/ask "
@@ -152,7 +154,7 @@ async def handle_gigachat(message: types.Message):
         logger.error(f"GigaChat error: {str(e)}")
         await message.answer("⚠️ Не удалось получить ответ. Попробуйте позже.")
 
-@dp.message()
+@router.message()
 async def handle_unknown(message: types.Message):
     if await check_user_profile(message.from_user.id):
         await message.answer("Неизвестная команда. Используйте /nutrition, /generate_meal или /ask")
