@@ -18,7 +18,7 @@ router = Router()
 def get_commands_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="/profile"), KeyboardButton(text="/Обновить")],
+            [KeyboardButton(text="/profile"), KeyboardButton(text="/update")],
             [KeyboardButton(text="/help")]
         ],
         resize_keyboard=True,
@@ -31,7 +31,7 @@ async def check_user_profile(user_id: int) -> bool:
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
     welcome_text = (
-        f"👋 <b>Добро пожаловать в FitnessBot!</b>\n\n"
+        f"👋 <b>Добро пожаловать!</b>\n\n"
         f"📅 Сегодня: {datetime.datetime.now().strftime('%d.%m.%Y')}\n\n"
     )
     
