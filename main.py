@@ -15,14 +15,14 @@ logger = logging.getLogger(__name__)
 bot = Bot(token=BOT_TOKEN)
 router = Router()
 
-def get_main_keyboard():
+def get_commands_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton("/profile"), KeyboardButton("/update")],
-            [KeyboardButton("/food_add"), KeyboardButton("/food_today")],
-            [KeyboardButton("/help")]
+            [KeyboardButton(text="/profile"), KeyboardButton(text="/update")],
+            [KeyboardButton(text="/help")]
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        input_field_placeholder="Выберите команду..."
     )
 
 async def check_user_profile(user_id: int) -> bool:
@@ -65,56 +65,7 @@ async def cmd_help(message: types.Message):
         reply_markup=get_commands_keyboard(),
         parse_mode="HTML"
     )
-# Новые команды:
-@router.message(Command("food_add"))
-async def add_food_start(message: types.Message):
-    await message.answer(
-        "🍎 Введите данные о еде в формате:\n"
-        "<b>Название / Калории / Белки / Жиры / Углеводы</b>\n\n"
-        "Пример: <code>Куриная грудка / 165 / 31 / 3.6 / 0</code>",
-        parse_mode="HTML"
-    )
 
-@router.message(lambda message: len(message.text.split('/')) == 5)
-async def handle_food_entry(message: types.Message):
-    try:
-        parts = [x.strip() for x in message.text.split('/')]
-        if not all(parts):
-            raise ValueError("Все поля обязательны")
-            
-        food_name, calories, protein, fats, carbs = parts
-        save_food_entry(
-            user_id=message.from_user.id,
-            food_name=food_name,
-            calories=int(calories),
-            protein=float(protein),
-            fats=float(fats),
-            carbs=float(carbs)
-        )
-        await message.answer(f"✅ Добавлено: {food_name}")
-    except ValueError as e:
-        await message.answer(f"❌ Ошибка: {str(e)}\nИспользуйте правильный формат!")
-
-@router.message(Command("food_today"))
-async def show_today_food(message: types.Message):
-    entries = get_today_food_entries(message.from_user.id)
-    if not entries:
-        await message.answer("Сегодня ещё нет записей о питании")
-        return
-    
-    total = {"calories": 0, "protein": 0, "fats": 0, "carbs": 0}
-    response = ["📊 <b>Сегодня съедено:</b>"]
-    
-    for entry in entries:
-        response.append(f"🍴 {entry.food_name}: {entry.calories} ккал (Б: {entry.protein}г, Ж: {entry.fats}г, У: {entry.carbs}г)")
-        total["calories"] += entry.calories
-        total["protein"] += entry.protein
-        total["fats"] += entry.fats
-        total["carbs"] += entry.carbs
-    
-    response.append(f"\n<b>Итого:</b> {total['calories']} ккал | Б: {total['protein']}г | Ж: {total['fats']}г | У: {total['carbs']}г")
-    
-    await message.answer("\n".join(response), parse_mode="HTML")
 
 @router.message(Command("profile"))
 async def show_profile(message: types.Message):
