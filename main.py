@@ -1,6 +1,7 @@
 from aiogram import Bot, Dispatcher, types, Router, F
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from database import save_food_entry, get_today_food_entries
 from config import BOT_TOKEN
 import asyncio
 import logging
@@ -19,10 +20,9 @@ def get_commands_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="/profile"), KeyboardButton(text="/update")],
-            [KeyboardButton(text="/help")]
+            [KeyboardButton(text="/food_diary"), KeyboardButton(text="/help")]  # Добавлено
         ],
-        resize_keyboard=True,
-        input_field_placeholder="Выберите команду..."
+        resize_keyboard=True
     )
 
 async def check_user_profile(user_id: int) -> bool:
@@ -84,6 +84,39 @@ async def show_profile(message: types.Message):
         reply_markup=get_commands_keyboard(),
         parse_mode="HTML"
     )
+
+@router.message(lambda message: len(message.text.split('/')) == 5)
+async def handle_food_entry(message: types.Message):
+    try:
+        food_name, calories, protein, fats, carbs = [x.strip() for x in message.text.split('/')]
+        save_food_entry(
+            user_id=message.from_user.id,  # Исправлено: = вместо -
+            food_name=food_name,
+            calories=int(calories),
+            protein=float(protein),
+            fats=float(fats),
+            carbs=float(carbs)
+        )
+        await message.answer("✅ Запись о еде добавлена!")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")  # Исправлено: нормальная обработка ошибки
+
+@router.message(Command("food_diary"))  # Исправлено: правильный декоратор
+async def show_food_diary(message: types.Message):
+    entries = get_today_food_entries(message.from_user.id)
+    if not entries:
+        await message.answer("Сегодня вы еще ничего не ели.")
+        return
+    
+    text = "🍽 <b>Ваш дневник питания:</b>\n\n"
+    for entry in entries:
+        text += (
+            f"• {entry.food_name}: "
+            f"{entry.calories} ккал, "
+            f"Б: {entry.protein}g, Ж: {entry.fats}g, У: {entry.carbs}g\n"
+        )
+    await message.answer(text, parse_mode="HTML")  # Добавлено завершение функции
+
 
 @router.message(Command("update"))
 async def update_profile(message: types.Message):
