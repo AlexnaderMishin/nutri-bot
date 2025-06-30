@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from datetime import datetime  # Добавляем импорт
 from config import DATABASE_URL
 import os
 
@@ -10,37 +11,42 @@ Base = declarative_base()
 
 class User(Base):
     __tablename__ = 'users'
-    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True)  # ID пользователя в Telegram
-    name = Column(String(100))             # Ограничение длины для PostgreSQL
-    height = Column(Float)                 # Рост в см
-    weight = Column(Float)                 # Вес в кг
-    age = Column(Integer)                  # Возраст
-    goal = Column(String(100))             # Цель (похудение, набор массы и т.д.)
+    user_id = Column(Integer, unique=True)
+    name = Column(String(100))
+    height = Column(Float)
+    weight = Column(Float)
+    age = Column(Integer)
+    goal = Column(String(100))
 
-# Создаем таблицы (автоматически при первом запуске)
+class FoodEntry(Base):
+    __tablename__ = 'food_entries'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+    food_name = Column(String(100))
+    calories = Column(Integer)
+    protein = Column(Float)
+    fats = Column(Float)
+    carbs = Column(Float)
+    date = Column(DateTime, default=datetime.now)  # Исправлено: datetime.now без скобок
+
+# Создаем таблицы
 Base.metadata.create_all(bind=engine)
 
-# Создаем фабрику сессий
+# Фабрика сессий
 Session = sessionmaker(bind=engine)
 
 def save_user(user_id: int, name: str, height: float, weight: float, age: int, goal: str):
-    """Сохраняет данные пользователя в базу данных"""
     session = Session()
     try:
-        # Проверяем, существует ли уже пользователь
         existing_user = session.query(User).filter(User.user_id == user_id).first()
-        
         if existing_user:
-            # Обновляем существующего пользователя
             existing_user.name = name
             existing_user.height = height
             existing_user.weight = weight
             existing_user.age = age
             existing_user.goal = goal
         else:
-            # Создаем нового пользователя
             user = User(
                 user_id=user_id,
                 name=name,
@@ -50,7 +56,6 @@ def save_user(user_id: int, name: str, height: float, weight: float, age: int, g
                 goal=goal
             )
             session.add(user)
-        
         session.commit()
     except Exception as e:
         session.rollback()
@@ -59,51 +64,18 @@ def save_user(user_id: int, name: str, height: float, weight: float, age: int, g
         session.close()
 
 def get_user_data(user_id: int) -> dict:
-    """Получает данные пользователя из базы данных"""
     session = Session()
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
-        if user:
-            return {
-                "name": user.name,
-                "height": user.height,
-                "weight": user.weight,
-                "age": user.age,
-                "goal": user.goal
-            }
-        return None
-    except Exception as e:
-        raise e
+        return {
+            "name": user.name,
+            "height": user.height,
+            "weight": user.weight,
+            "age": user.age,
+            "goal": user.goal
+        } if user else None
     finally:
         session.close()
-
-def delete_user(user_id: int) -> bool:
-    """Удаляет пользователя из базы данных"""
-    session = Session()
-    try:
-        user = session.query(User).filter(User.user_id == user_id).first()
-        if user:
-            session.delete(user)
-            session.commit()
-            return True
-        return False
-    except Exception as e:
-        session.rollback()
-        raise e
-    finally:
-        session.close()
-
-# В database.py добавляем:
-class FoodEntry(Base):
-    __tablename__ = 'food_entries'
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-    food_name = Column(String(100))
-    calories = Column(Integer)
-    protein = Column(Float)  # Б
-    fats = Column(Float)     # Ж
-    carbs = Column(Float)    # У
-    date = Column(DateTime, default=datetime.now())
 
 def save_food_entry(user_id: int, food_name: str, calories: int, protein: float, fats: float, carbs: float):
     session = Session()
@@ -125,9 +97,9 @@ def save_food_entry(user_id: int, food_name: str, calories: int, protein: float,
         session.close()
 
 def get_today_food_entries(user_id: int):
-    today = datetime.now().date()
     session = Session()
     try:
+        today = datetime.now().date()
         return session.query(FoodEntry).filter(
             FoodEntry.user_id == user_id,
             func.date(FoodEntry.date) == today
