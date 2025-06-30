@@ -1,11 +1,14 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
+from sqlalchemy.orm import sessionmaker, scoped_session
+from datetime import datetime, timedelta
 from config import DATABASE_URL
 import logging
+from typing import Optional, Dict, List
 
-# Отключаем логирование SQLAlchemy в продакшене
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
 
 Base = declarative_base()
@@ -13,71 +16,94 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True)
-    name = Column(String(100))
-    height = Column(Float)
-    weight = Column(Float)
-    age = Column(Integer)
-    goal = Column(String(100))
+    user_id = Column(Integer, unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    height = Column(Float, nullable=False)
+    weight = Column(Float, nullable=False)
+    age = Column(Integer, nullable=False)
+    goal = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class FoodEntry(Base):
     __tablename__ = 'food_entries'
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
-    food_name = Column(String(100))
-    calories = Column(Integer)
-    protein = Column(Float)
-    fats = Column(Float)
-    carbs = Column(Float)
-    date = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, nullable=False, index=True)
+    food_name = Column(String(100), nullable=False)
+    calories = Column(Integer, nullable=False)
+    protein = Column(Float, nullable=False)
+    fats = Column(Float, nullable=False)
+    carbs = Column(Float, nullable=False)
+    date = Column(DateTime, default=datetime.utcnow, index=True)
+    portion_size = Column(Float, default=100.0)  # Размер порции в граммах
 
-# Упрощенное подключение для Railway
+class FoodItem(Base):
+    __tablename__ = 'food_items'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False)
+    calories = Column(Integer, nullable=False)
+    protein = Column(Float, nullable=False)
+    fats = Column(Float, nullable=False)
+    carbs = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Настройки подключения для PostgreSQL на Railway
 engine = create_engine(
     DATABASE_URL,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=300
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,  # Важно для поддержания соединения
+    pool_recycle=3600,   # Пересоздавать соединения каждый час
+    connect_args={
+        'connect_timeout': 10,
+        'keepalives': 1,
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5
+    }
 )
 
-# Проверяем и создаем таблицы безопасно
-def safe_create_tables():
-    with engine.connect() as conn:
-        # Проверяем существование таблиц через raw SQL
-        users_exists = conn.execute(
-            "SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = 'users')"
-        ).scalar()
-        
-        food_entries_exists = conn.execute(
-            "SELECT EXISTS (SELECT FROM pg_tables WHERE tablename = 'food_entries')"
-        ).scalar()
-
-        if not users_exists:
-            User.__table__.create(conn)
-        if not food_entries_exists:
-            FoodEntry.__table__.create(conn)
-
-# Создаем сессию с отключенным автофлушем
-Session = sessionmaker(
-    bind=engine,
-    autoflush=False,
-    expire_on_commit=False
+# Сессия с автоматическим управлением
+Session = scoped_session(
+    sessionmaker(
+        bind=engine,
+        autoflush=False,
+        expire_on_commit=False
+    )
 )
 
 def get_session():
     return Session()
 
+def safe_create_tables():
+    """Создает таблицы, если они не существуют"""
+    with engine.connect() as conn:
+        # Получаем список всех таблиц в БД
+        existing_tables = set(
+            row[0] for row in conn.execute(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            ).fetchall()
+        )
+        
+        # Создаем только отсутствующие таблицы
+        for table_class in [User, FoodEntry, FoodItem]:
+            if table_class.__tablename__ not in existing_tables:
+                table_class.__table__.create(conn)
+                logger.info(f"Создана таблица {table_class.__tablename__}")
+
 # Функции для работы с пользователями
-def save_user(user_id: int, name: str, height: float, weight: float, age: int, goal: str):
+def save_user(user_id: int, name: str, height: float, weight: float, age: int, goal: str) -> bool:
+    """Сохраняет или обновляет данные пользователя"""
     session = get_session()
     try:
-        existing = session.query(User).filter(User.user_id == user_id).first()
-        if existing:
-            existing.name = name
-            existing.height = height
-            existing.weight = weight
-            existing.age = age
-            existing.goal = goal
+        user = session.query(User).filter(User.user_id == user_id).first()
+        if user:
+            user.name = name
+            user.height = height
+            user.weight = weight
+            user.age = age
+            user.goal = goal
         else:
             session.add(User(
                 user_id=user_id,
@@ -88,13 +114,16 @@ def save_user(user_id: int, name: str, height: float, weight: float, age: int, g
                 goal=goal
             ))
         session.commit()
+        return True
     except Exception as e:
         session.rollback()
-        raise e
+        logger.error(f"Ошибка сохранения пользователя: {e}")
+        return False
     finally:
-        session.close()
+        Session.remove()
 
-def get_user_data(user_id: int):
+def get_user_data(user_id: int) -> Optional[Dict]:
+    """Возвращает данные пользователя в виде словаря"""
     session = get_session()
     try:
         user = session.query(User).filter(User.user_id == user_id).first()
@@ -105,11 +134,23 @@ def get_user_data(user_id: int):
             "age": user.age,
             "goal": user.goal
         } if user else None
+    except Exception as e:
+        logger.error(f"Ошибка получения данных пользователя: {e}")
+        return None
     finally:
-        session.close()
+        Session.remove()
 
-# Функции для работы с питанием
-def save_food_entry(user_id: int, food_name: str, calories: int, protein: float, fats: float, carbs: float):
+# Функции для работы с дневником питания
+def save_food_entry(
+    user_id: int,
+    food_name: str,
+    calories: int,
+    protein: float,
+    fats: float,
+    carbs: float,
+    portion_size: float = 100.0
+) -> bool:
+    """Сохраняет запись о приеме пищи"""
     session = get_session()
     try:
         session.add(FoodEntry(
@@ -118,38 +159,128 @@ def save_food_entry(user_id: int, food_name: str, calories: int, protein: float,
             calories=calories,
             protein=protein,
             fats=fats,
-            carbs=carbs
+            carbs=carbs,
+            portion_size=portion_size
         ))
         session.commit()
+        return True
     except Exception as e:
         session.rollback()
-        raise e
+        logger.error(f"Ошибка сохранения записи о питании: {e}")
+        return False
     finally:
-        session.close()
+        Session.remove()
 
-def get_today_food_entries(user_id: int):
+def get_today_food_entries(user_id: int) -> List[Dict]:
+    """Возвращает записи о питании за сегодня"""
     session = get_session()
     try:
         today = datetime.utcnow().date()
-        return session.query(FoodEntry).filter(
+        entries = session.query(FoodEntry).filter(
             FoodEntry.user_id == user_id,
             func.date(FoodEntry.date) == today
         ).all()
+        
+        return [{
+            "id": entry.id,
+            "food_name": entry.food_name,
+            "calories": entry.calories,
+            "protein": entry.protein,
+            "fats": entry.fats,
+            "carbs": entry.carbs,
+            "portion_size": entry.portion_size,
+            "date": entry.date
+        } for entry in entries]
+    except Exception as e:
+        logger.error(f"Ошибка получения записей о питании: {e}")
+        return []
     finally:
-        session.close()
+        Session.remove()
 
-# Инициализация при первом запуске
+# Функции для работы с кэшем продуктов
+def get_food_item(name: str) -> Optional[Dict]:
+    """Ищет продукт в локальной базе по названию"""
+    session = get_session()
+    try:
+        item = session.query(FoodItem).filter(
+            func.lower(FoodItem.name) == func.lower(name)
+        ).first()
+        
+        return {
+            "name": item.name,
+            "calories": item.calories,
+            "protein": item.protein,
+            "fats": item.fats,
+            "carbs": item.carbs
+        } if item else None
+    except Exception as e:
+        logger.error(f"Ошибка поиска продукта: {e}")
+        return None
+    finally:
+        Session.remove()
+
+def add_food_item(name: str, calories: int, protein: float, fats: float, carbs: float) -> bool:
+    """Добавляет продукт в локальную базу"""
+    session = get_session()
+    try:
+        session.add(FoodItem(
+            name=name.lower(),
+            calories=calories,
+            protein=protein,
+            fats=fats,
+            carbs=carbs
+        ))
+        session.commit()
+        return True
+    except Exception as e:
+        session.rollback()
+        logger.error(f"Ошибка добавления продукта: {e}")
+        return False
+    finally:
+        Session.remove()
+
+def search_food_items(query: str, limit: int = 5) -> List[Dict]:
+    """Ищет продукты по названию"""
+    session = get_session()
+    try:
+        items = session.query(FoodItem).filter(
+            FoodItem.name.ilike(f"%{query}%")
+        ).limit(limit).all()
+        
+        return [{
+            "name": item.name,
+            "calories": item.calories,
+            "protein": item.protein,
+            "fats": item.fats,
+            "carbs": item.carbs
+        } for item in items]
+    except Exception as e:
+        logger.error(f"Ошибка поиска продуктов: {e}")
+        return []
+    finally:
+        Session.remove()
+
+# Инициализация БД при первом запуске
 try:
     safe_create_tables()
+    logger.info("Проверка таблиц БД завершена")
 except Exception as e:
-    print(f"Ошибка инициализации БД: {e}")
-    
+    logger.error(f"Ошибка инициализации БД: {e}")
+
 if __name__ == "__main__":
-    print("Проверка подключения к БД...")
+    print("=== Тест подключения к БД ===")
     try:
         safe_create_tables()
         print("Таблицы успешно созданы/проверены")
-        print("Структура users:", [c.name for c in User.__table__.columns])
-        print("Структура food_entries:", [c.name for c in FoodEntry.__table__.columns])
+        
+        with get_session() as session:
+            print("\nСтруктура таблиц:")
+            for table in [User, FoodEntry, FoodItem]:
+                print(f"- {table.__tablename__}: {[c.name for c in table.__table__.columns]}")
+            
+            print("\nСтатистика:")
+            print(f"Пользователей: {session.query(User).count()}")
+            print(f"Записей о питании: {session.query(FoodEntry).count()}")
+            print(f"Продуктов в базе: {session.query(FoodItem).count()}")
     except Exception as e:
         print(f"Ошибка: {e}")
