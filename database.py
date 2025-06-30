@@ -1,57 +1,75 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, func, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from config import DATABASE_URL
-import os
+import logging
 
-# 1. Сначала инициализируем базовый класс
+# Настройка логирования SQL
+logging.basicConfig()
+logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
 Base = declarative_base()
 
-# 2. Затем объявляем модели
 class User(Base):
     __tablename__ = 'users'
-    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, unique=True)
+    user_id = Column(Integer, unique=True, index=True)
     name = Column(String(100))
     height = Column(Float)
     weight = Column(Float)
     age = Column(Integer)
     goal = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Убрали created_at для совместимости с существующей БД
 
 class FoodEntry(Base):
     __tablename__ = 'food_entries'
-    
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer)
+    user_id = Column(Integer, index=True)
     food_name = Column(String(100))
     calories = Column(Integer)
     protein = Column(Float)
     fats = Column(Float)
     carbs = Column(Float)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    date = Column(DateTime, default=datetime.utcnow)
 
-# 3. Инициализация движка и сессии
-engine = create_engine(DATABASE_URL)
+# Настройка подключения для Railway
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5
+    }
+)
+
 Session = sessionmaker(bind=engine)
 
-# 4. Создание таблиц (если они не существуют)
 def init_db():
+    """Инициализация базы данных с проверкой структуры"""
+    inspector = inspect(engine)
+    
+    # Создаем таблицу food_entries, если ее нет
+    if 'food_entries' not in inspector.get_table_names():
+        FoodEntry.__table__.create(engine)
+    
+    # Проверяем основные таблицы
     Base.metadata.create_all(engine)
 
-# 5. Функции для работы с пользователями
+# Функции для работы с пользователями
 def save_user(user_id: int, name: str, height: float, weight: float, age: int, goal: str):
     session = Session()
     try:
-        existing_user = session.query(User).filter(User.user_id == user_id).first()
-        if existing_user:
-            existing_user.name = name
-            existing_user.height = height
-            existing_user.weight = weight
-            existing_user.age = age
-            existing_user.goal = goal
+        user = session.query(User).filter(User.user_id == user_id).first()
+        if user:
+            user.name = name
+            user.height = height
+            user.weight = weight
+            user.age = age
+            user.goal = goal
         else:
             session.add(User(
                 user_id=user_id,
@@ -82,7 +100,7 @@ def get_user_data(user_id: int) -> dict:
     finally:
         session.close()
 
-# 6. Функции для работы с питанием
+# Функции для работы с питанием
 def save_food_entry(user_id: int, food_name: str, calories: int, protein: float, fats: float, carbs: float):
     session = Session()
     try:
@@ -107,10 +125,10 @@ def get_today_food_entries(user_id: int):
         today = datetime.utcnow().date()
         return session.query(FoodEntry).filter(
             FoodEntry.user_id == user_id,
-            func.date(FoodEntry.created_at) == today
+            func.date(FoodEntry.date) == today
         ).all()
     finally:
         session.close()
 
-# Инициализация БД при импорте
+# Инициализация при импорте
 init_db()
