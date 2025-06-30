@@ -77,12 +77,11 @@ def get_session():
     return Session()
 
 def safe_create_tables():
-    """Создает таблицы, если они не существуют"""
     with engine.connect() as conn:
-        # Получаем список всех таблиц в БД
+        from sqlalchemy import text
         existing_tables = set(
             row[0] for row in conn.execute(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+                text("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
             ).fetchall()
         )
         
