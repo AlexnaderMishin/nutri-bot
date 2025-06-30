@@ -1,6 +1,6 @@
-from aiogram import Bot, Dispatcher, types, Router, F
+from aiogram import Bot, Dispatcher, types, Router
 from aiogram.filters import Command
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from config import BOT_TOKEN
 import asyncio
 import logging
@@ -12,31 +12,27 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
 router = Router()
-dp.include_router(router)
 
 def get_main_keyboard():
-    buttons = [
-        [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="✏️ Обновить")],
-        [KeyboardButton(text="❓ Помощь")]
-    ]
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True)
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="👤 Профиль"), KeyboardButton(text="✏️ Обновить")],
+            [KeyboardButton(text="❓ Помощь")]
+        ],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие"
+    )
 
 async def check_user_profile(user_id: int) -> bool:
-    """Проверяет, заполнен ли профиль пользователя"""
     return get_user_data(user_id) is not None
 
 @router.message(Command("start"))
-async def start(message: types.Message):
+async def cmd_start(message: types.Message):
     if await check_user_profile(message.from_user.id):
         user_data = get_user_data(message.from_user.id)
         await message.answer(
-            "Доступные команды:\n"
-            "👤 Профиль - показать ваш профиль\n"
-            "✏️ Обновить - изменить параметры\n"
-            "❓ Помощь - показать это сообщение\n\n"
-            f"Текущие данные:\n"
+            "Добро пожаловать! Вот ваши данные:\n"
             f"Имя: {user_data['name']}\n"
             f"Рост: {user_data['height']} см\n"
             f"Вес: {user_data['weight']} кг\n"
@@ -46,45 +42,60 @@ async def start(message: types.Message):
         )
     else:
         await message.answer(
-            "Привет! Для начала работы введи данные в формате:\n"
-            "Имя/Рост/Вес/Возраст/Цель\n\n"
-            "Пример: Александр/180/75/30/похудение",
-            reply_markup=get_main_keyboard()
+            "Привет! Для начала введите свои данные в формате:\n"
+            "<b>Имя/Рост/Вес/Возраст/Цель</b>\n\n"
+            "Пример: <code>Александр/180/75/30/похудение</code>",
+            reply_markup=ReplyKeyboardRemove(),
+            parse_mode="HTML"
         )
 
 @router.message(F.text == "❓ Помощь")
-async def help_cmd(message: types.Message):
-    await start(message)  # Повторно используем логику команды /start
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    await message.answer(
+        "ℹ️ <b>Доступные команды:</b>\n\n"
+        "/start - Начать работу с ботом\n"
+        "/profile - Показать ваш профиль\n"
+        "/update - Обновить данные профиля\n"
+        "/help - Показать это сообщение\n\n"
+        "Или используйте кнопки ниже 👇",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML"
+    )
 
-@router.message(Command("profile") | (F.text == "👤 Профиль"))
+@router.message(F.text == "👤 Профиль")
+@router.message(Command("profile"))
 async def show_profile(message: types.Message):
     if not await check_user_profile(message.from_user.id):
-        await message.answer("Профиль не заполнен. Введите данные в формате: Имя/Рост/Вес/Возраст/Цель", 
-                           reply_markup=get_main_keyboard())
+        await message.answer("Профиль не заполнен. Введите данные через /start")
         return
     
     user_data = get_user_data(message.from_user.id)
     await message.answer(
-        f"Ваш профиль:\n"
-        f"Имя: {user_data['name']}\n"
-        f"Рост: {user_data['height']} см\n"
-        f"Вес: {user_data['weight']} кг\n"
-        f"Возраст: {user_data['age']} лет\n"
-        f"Цель: {user_data['goal']}",
-        reply_markup=get_main_keyboard()
+        "📋 <b>Ваш профиль:</b>\n\n"
+        f"👤 Имя: {user_data['name']}\n"
+        f"📏 Рост: {user_data['height']} см\n"
+        f"⚖️ Вес: {user_data['weight']} кг\n"
+        f"🎂 Возраст: {user_data['age']} лет\n"
+        f"🎯 Цель: {user_data['goal']}",
+        reply_markup=get_main_keyboard(),
+        parse_mode="HTML"
     )
 
-@router.message(Command("update") | (F.text == "✏️ Обновить"))
+@router.message(F.text == "✏️ Обновить")
+@router.message(Command("update"))
 async def update_profile(message: types.Message):
     await message.answer(
-        "Введите новые данные в формате: Имя/Рост/Вес/Возраст/Цель\n\n"
-        "Пример: Александр/180/75/30/похудение\n\n"
-        "Для отмены просто введите любой текст",
-        reply_markup=ReplyKeyboardRemove()
+        "✏️ Введите новые данные в формате:\n"
+        "<b>Имя/Рост/Вес/Возраст/Цель</b>\n\n"
+        "Пример: <code>Александр/180/75/30/похудение</code>\n\n"
+        "Для отмены введите любой текст",
+        reply_markup=ReplyKeyboardRemove(),
+        parse_mode="HTML"
     )
 
 @router.message(lambda message: len(message.text.split('/')) == 5)
-async def handle_profile(message: types.Message):
+async def handle_profile_data(message: types.Message):
     try:
         name, height, weight, age, goal = message.text.split('/')
         
@@ -107,28 +118,44 @@ async def handle_profile(message: types.Message):
             age=age_val,
             goal=goal.strip()
         )
-        await message.answer("✅ Профиль сохранён!", reply_markup=get_main_keyboard())
+        await message.answer(
+            "✅ <b>Профиль успешно сохранён!</b>",
+            reply_markup=get_main_keyboard(),
+            parse_mode="HTML"
+        )
         await show_profile(message)
     except ValueError as e:
         await message.answer(
-            f"❌ Ошибка: {str(e)}\n\n"
-            "Правильный формат: Имя/Рост/Вес/Возраст/Цель\n\n"
-            "Пример: Иван/180/75/30/похудение",
-            reply_markup=get_main_keyboard()
+            f"❌ <b>Ошибка:</b> {str(e)}\n\n"
+            "Правильный формат: <b>Имя/Рост/Вес/Возраст/Цель</b>\n\n"
+            "Пример: <code>Иван/180/75/30/похудение</code>",
+            reply_markup=get_main_keyboard(),
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.error(f"Ошибка сохранения: {str(e)}")
-        await message.answer("❌ Произошла ошибка при сохранении профиля", reply_markup=get_main_keyboard())
+        await message.answer(
+            "❌ <b>Произошла ошибка при сохранении профиля</b>",
+            reply_markup=get_main_keyboard(),
+            parse_mode="HTML"
+        )
 
 @router.message()
-async def handle_unknown(message: types.Message):
-    if len(message.text.split('/')) != 5:  # Если это не данные профиля
+async def handle_other_messages(message: types.Message):
+    if await check_user_profile(message.from_user.id):
         await message.answer(
-            "Используйте кнопки ниже или введите данные профиля",
+            "Я не понимаю эту команду. Используйте кнопки ниже 👇",
             reply_markup=get_main_keyboard()
+        )
+    else:
+        await message.answer(
+            "Сначала заполните профиль через /start",
+            reply_markup=ReplyKeyboardRemove()
         )
 
 async def main():
+    dp = Dispatcher()
+    dp.include_router(router)
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
